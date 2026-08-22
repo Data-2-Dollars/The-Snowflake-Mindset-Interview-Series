@@ -1,0 +1,129 @@
+CREATE OR REPLACE STORAGE INTEGRATION s3_int
+  TYPE = EXTERNAL_STAGE
+  STORAGE_PROVIDER = 'S3'
+  ENABLED = TRUE
+  STORAGE_AWS_ROLE_ARN = 'arn:aws:iam::641820721192:role/snf-loading'
+  STORAGE_ALLOWED_LOCATIONS = ('s3://snf-loading/');
+
+  DESC INTEGRATION s3_int;
+
+CREATE OR REPLACE STAGE my_s3_stage
+  STORAGE_INTEGRATION = s3_int
+  URL = 's3://snf-loading/'
+  FILE_FORMAT = (TYPE = CSV);
+
+LIST @my_s3_stage;
+
+CREATE or replace TABLE customers (
+    customer_id      VARCHAR,
+    gender           VARCHAR,
+    age              VARCHAR,
+    annual_income    VARCHAR,
+    spending_score   VARCHAR
+);
+
+select * from customers;
+
+--sCENARIO 1 
+COPY INTO CUSTOMERS
+FROM @my_s3_stage;
+
+
+--SCENARIO 2
+COPY INTO CUSTOMERS
+FROM @my_s3_stage
+FILES=('customers.csv');
+
+
+--SCENARIO 3
+truncate table CUSTOMERS;
+COPY INTO CUSTOMERS
+FROM @my_s3_stage
+PATTERN = '.*customer.*';
+
+
+---SCENARIO 4
+
+truncate table CUSTOMERS;
+COPY INTO CUSTOMERS
+FROM @my_s3_stage
+PATTERN = '.*customer.*'
+FILE_FORMAT = (TYPE = 'CSV');
+
+--SCENARIO 5
+
+truncate table CUSTOMERS;
+COPY INTO CUSTOMERS
+FROM @my_s3_stage
+PATTERN = '.*CUST.*'
+ON_ERROR = 'CONTINUE';
+
+
+--SCENARIO 6
+
+truncate table CUSTOMERS;
+COPY INTO CUSTOMERS
+FROM @my_s3_stage
+PATTERN = '.*customer.*'
+SIZE_LIMIT = 5 ;
+
+
+--scenario 7
+
+truncate table CUSTOMERS;
+COPY INTO CUSTOMERS
+FROM @my_s3_stage
+PATTERN = '.*customer.*'
+PURGE = TRUE
+TRUNCATECOLUMNS=TRUE;
+
+
+---SCENARIO 8
+
+truncate table CUSTOMERS;
+COPY INTO CUSTOMERS
+FROM @my_s3_stage
+PATTERN = '.*customer.*'
+FORCE = TRUE
+LOAD_UNCERTAIN_FILES = TRUE
+MATCH_BY_COLUMN_NAME = CASE_INSENSITIVE
+ENFORCE_LENGTH = TRUE;
+
+---SCENARIO 9
+
+SELECT S.$1,S.$2,METADATA$FILENAME,METADATA$FILE_ROW_NUMBER FROM @my_s3_stage S];
+
+
+--SCENARIO 10
+
+truncate table CUSTOMERS;
+COPY INTO CUSTOMERS
+FROM @my_s3_stage
+PATTERN = '.*customer.*'
+VALIDATION_MODE = RETURN_ERRORS;
+
+
+-- ==============================================DATA UNLOADING
+
+SELECT * FROM CUSTOMERS;
+COPY INTO @my_s3_stage/CUST_CSV/
+FROM  CUSTOMERS
+FILE_FORMAT = (
+TYPE = 'CSV'
+);
+
+SELECT * FROM CUSTOMERS;
+COPY INTO @my_s3_stage/CUST_JSON/
+FROM  (SELECT OBJECT_CONSTRUCT(*) FROM CUSTOMERS)
+FILE_FORMAT = (
+TYPE = 'JSON'
+);
+
+SELECT * FROM CUSTOMERS;
+COPY INTO @my_s3_stage/CUST_PAR/
+FROM CUSTOMERS
+FILE_FORMAT = (
+TYPE = 'PARQUET'
+);
+
+
