@@ -1,0 +1,54 @@
+name: snowflake-devops-demo
+
+# Configure triggers for the workflow execution
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'migrations/**'
+  
+  # Allow manual trigger execution from GitHub Actions UI
+  workflow_dispatch:
+
+jobs:
+  deploy-snowflake-changes-job:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Check out source code repository
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # Step 2: Set up Python environment
+      - name: Setup Python 3.8
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.8'
+
+      # Step 3: Install schemachange CLI dependency
+      - name: Install schemachange
+        run: |
+          python -m pip install --upgrade pip
+          pip install schemachange
+
+      # Step 4: Execute schemachange deployment engine
+      - name: Run schemachange Deployment
+        env:
+          SF_ACCOUNT: ${{ secrets.SF_ACCOUNT }}
+          SF_USERNAME: ${{ secrets.SF_USERNAME }}
+          SF_ROLE: ${{ secrets.SF_ROLE }}
+          SF_WAREHOUSE: ${{ secrets.SF_WAREHOUSE }}
+          SF_DATABASE: ${{ secrets.SF_DATABASE }}
+          SNOWFLAKE_PASSWORD: ${{ secrets.SF_PASSWORD }}
+        run: |
+          echo "Workspace Root Path: $GITHUB_WORKSPACE"
+          schemachange -f $GITHUB_WORKSPACE/migrations \
+                       -a $SF_ACCOUNT \
+                       -u $SF_USERNAME \
+                       -r $SF_ROLE \
+                       -w $SF_WAREHOUSE \
+                       -d $SF_DATABASE \
+                       -c $SF_DATABASE.SCHEMACHANGE.CHANGE_HISTORY \
+                       --create-change-history-table
