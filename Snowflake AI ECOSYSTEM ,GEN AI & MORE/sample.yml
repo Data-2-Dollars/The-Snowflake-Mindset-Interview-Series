@@ -1,0 +1,92 @@
+name: RETAIL_SALES_ANALYSIS
+description: "Semantic view for analyzing corporate retail sales, customer data, and store locations."
+
+tables:
+  # ----------------------------------------------------
+  # Table 1: Store Sales (The main Fact Table)
+  # ----------------------------------------------------
+  - name: store_sales
+    description: "Transaction records for all completed in-store sales."
+    base_table:
+      database: PROD_DB
+      schema: SALES_DATA
+      table: IN_STORE_TRANSACTIONS
+    primary_key:
+      columns:
+        - TRANSACTION_ID
+    
+    dimensions:
+      - name: quantity
+        description: "Number of units purchased in the transaction."
+        expr: store_sales.quantity_sold
+        data_type: NUMBER
+        
+      - name: transaction_date
+        description: "The calendar date when the purchase occurred."
+        expr: store_sales.txn_date
+        data_type: DATE
+
+    facts:
+      - name: sale_amount
+        description: "The raw gross dollar value of the individual sale before taxes."
+        expr: store_sales.gross_amount
+        data_type: NUMBER
+
+    metrics:
+      - name: total_revenue
+        description: "Sum of gross sales revenue across all completed store transactions."
+        expr: "SUM(store_sales.gross_amount)"
+      - name: average_order_value
+        description: "The average dollar value spent per transaction."
+        expr: "AVG(store_sales.gross_amount)"
+
+  # ----------------------------------------------------
+  # Table 2: Customers (Dimension Table)
+  # ----------------------------------------------------
+  - name: customers
+    description: "Profiles and demographic data for registered loyalty members."
+    base_table:
+      database: PROD_DB
+      schema: CORE_DIMENSIONS
+      table: CUSTOMER_REGISTRY
+    primary_key:
+      columns:
+        - CUSTOMER_ID
+
+    dimensions:
+      - name: customer_name
+        synonyms:
+          - "client name"
+          - "buyer"
+        description: "Full name of the customer."
+        expr: customers.full_name
+        data_type: VARCHAR(100)
+
+      - name: region
+        description: "Geographic territory where the customer resides."
+        expr: customers.home_region
+        data_type: VARCHAR(50)
+
+      # Entity-level filter definition for high value buyers
+      - name: premier_member
+        description: "Indicates if the customer has over 500 loyalty points."
+        expr: customers.loyalty_points > 500
+        data_type: BOOLEAN
+        labels:
+          - filter
+
+# ----------------------------------------------------
+# Relationships (Defining Joins)
+# ----------------------------------------------------
+relationships:
+  - name: sales_to_customers
+    description: "Links store sales transactions back to the purchasing customer profile."
+    relationship_type: MANY_TO_ONE
+    join_type: INNER
+    left_table: store_sales
+    right_table: customers
+    join_condition: store_sales.cust_id = customers.customer_id
+
+
+
+#--Verified queries
