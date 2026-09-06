@@ -1,0 +1,313 @@
+name: tpch_sales_analytics
+description: Semantic layer for TPC-H global sales and customer analytics
+tables:
+  - name: customer
+    description: Contains customer profile and market segment data
+    base_table:
+      database: SNOWFLAKE_SAMPLE_DATA
+      schema: TPCH_SF1
+      table: CUSTOMER
+    dimensions:
+      - name: customer_key
+        synonyms:
+          - account id
+          - cust key
+          - customer id
+        description: Unique identifier for each customer
+        expr: C_CUSTKEY
+        data_type: NUMBER
+      - name: customer_name
+        synonyms:
+          - account name
+          - client name
+          - name
+        description: Full name of the customer
+        expr: C_NAME
+        data_type: TEXT
+      - name: market_segment
+        synonyms:
+          - business type
+          - customer segment
+          - industry
+          - segment
+          - vertical
+        description: Industry segment the customer belongs to (e.g. AUTOMOBILE, BUILDING, FURNITURE, MACHINERY, HOUSEHOLD)
+        expr: C_MKTSEGMENT
+        data_type: TEXT
+      - name: nation_key
+        synonyms:
+          - country id
+          - nation id
+        description: Foreign key linking the customer to their nation
+        expr: C_NATIONKEY
+        data_type: NUMBER
+    primary_key:
+      columns:
+        - CUSTOMER_KEY
+  - name: nation
+    description: Geography dimension for customer nation lookup
+    base_table:
+      database: SNOWFLAKE_SAMPLE_DATA
+      schema: TPCH_SF1
+      table: NATION
+    dimensions:
+      - name: country_name
+        synonyms:
+          - country
+          - country name
+          - nation
+          - region
+        description: Name of the nation or country
+        expr: N_NAME
+        data_type: TEXT
+      - name: nation_key
+        synonyms:
+          - country id
+          - country key
+          - nation id
+        description: Unique identifier for each nation
+        expr: N_NATIONKEY
+        data_type: NUMBER
+    primary_key:
+      columns:
+        - NATION_KEY
+  - name: orders
+    description: Order header details including dates and order status
+    base_table:
+      database: SNOWFLAKE_SAMPLE_DATA
+      schema: TPCH_SF1
+      table: ORDERS
+    dimensions:
+      - name: customer_key
+        synonyms:
+          - buyer id
+          - customer id
+        description: Foreign key linking the order to the customer who placed it
+        expr: O_CUSTKEY
+        data_type: NUMBER
+      - name: order_date
+        synonyms:
+          - date
+          - order placed date
+          - purchase date
+          - transaction date
+        description: Date when the order was placed
+        expr: O_ORDERDATE
+        data_type: DATE
+      - name: order_key
+        synonyms:
+          - order id
+          - order number
+          - purchase id
+        description: Unique identifier for each order
+        expr: O_ORDERKEY
+        data_type: NUMBER
+      - name: order_priority
+        synonyms:
+          - order urgency
+          - priority
+          - priority level
+          - urgency
+        description: Priority level of the order (e.g. 1-URGENT, 2-HIGH, 3-MEDIUM, 4-NOT SPECIFIED, 5-LOW)
+        expr: O_ORDERPRIORITY
+        data_type: TEXT
+      - name: order_status
+        synonyms:
+          - fulfillment status
+          - order condition
+          - order state
+          - status
+        description: Current fulfillment status of the order (F = fulfilled, O = open, P = partial)
+        expr: O_ORDERSTATUS
+        data_type: TEXT
+    primary_key:
+      columns:
+        - ORDER_KEY
+  - name: lineitem
+    description: Line-item sales details, prices, and discounts
+    base_table:
+      database: SNOWFLAKE_SAMPLE_DATA
+      schema: TPCH_SF1
+      table: LINEITEM
+    dimensions:
+      - name: order_key
+        synonyms:
+          - order id
+          - order number
+        description: Foreign key linking the line item to its parent order
+        expr: L_ORDERKEY
+        data_type: NUMBER
+      - name: ship_mode
+        synonyms:
+          - carrier
+          - delivery method
+          - shipment type
+          - shipping method
+          - transport mode
+        description: Method of shipment used for the line item (e.g. AIR, MAIL, RAIL, REG AIR, SHIP, TRUCK, FOB)
+        expr: L_SHIPMODE
+        data_type: TEXT
+    facts:
+      - name: line_item_count
+        synonyms:
+          - item count
+          - items sold
+          - lines
+          - number of items
+          - quantity of items
+        description: Total number of line items across orders
+        expr: COUNT(L_LINENUMBER)
+        data_type: NUMBER
+      - name: net_revenue
+        synonyms:
+          - net sales
+          - revenue
+          - sales
+          - total revenue
+        description: Total revenue generated after discounts
+        expr: SUM(L_EXTENDEDPRICE * (1 - L_DISCOUNT))
+        data_type: NUMBER
+      - name: total_discount_amount
+        synonyms:
+          - discount total
+          - discount value
+          - discounts
+          - total discounts
+        description: Total monetary value of discounts applied across line items
+        expr: SUM(L_EXTENDEDPRICE * L_DISCOUNT)
+        data_type: NUMBER
+relationships:
+  - name: customer_to_nation
+    left_table: customer
+    right_table: nation
+    relationship_type: many_to_one
+    relationship_columns:
+      - left_column: nation_key
+        right_column: NATION_KEY
+  - name: orders_to_customer
+    left_table: orders
+    right_table: customer
+    relationship_type: many_to_one
+    relationship_columns:
+      - left_column: customer_key
+        right_column: CUSTOMER_KEY
+  - name: lineitem_to_orders
+    left_table: lineitem
+    right_table: orders
+    relationship_type: many_to_one
+    relationship_columns:
+      - left_column: order_key
+        right_column: ORDER_KEY
+verified_queries:
+  - name: top_market_segments_by_revenue
+    question: Which market segment generates the highest net revenue?
+    verified_at: 1700000000
+    verified_by: Lead Data Engineer
+    sql: |
+      SELECT 
+        c.c_mktsegment AS market_segment,
+        SUM(l.l_extendedprice * (1 - l.l_discount)) AS net_revenue
+      FROM SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.CUSTOMER c
+      JOIN SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.ORDERS o ON c.c_custkey = o.o_custkey
+      JOIN SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.LINEITEM l ON o.o_orderkey = l.l_orderkey
+      GROUP BY 1
+      ORDER BY 2 DESC;
+  - name: annual_discount_totals_by_nation
+    question: What is the total discount amount given per country in 1996?
+    verified_at: 1700000000
+    verified_by: Analytics Manager
+    sql: |
+      SELECT 
+        n.n_name AS country_name,
+        SUM(l.l_extendedprice * l.l_discount) AS total_discount_amount
+      FROM SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.LINEITEM l
+      JOIN SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.ORDERS o ON l.l_orderkey = o.o_orderkey
+      JOIN SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.CUSTOMER c ON o.o_custkey = c.c_custkey
+      JOIN SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.NATION n ON c.c_nationkey = n.n_nationkey
+      WHERE o.o_orderdate >= '1996-01-01' AND o.o_orderdate <= '1996-12-31'
+      GROUP BY 1
+      ORDER BY 2 DESC;
+  - name: monthly_revenue_trend_1996
+    question: What is the monthly revenue trend for 1996?
+    verified_at: 1700000000
+    verified_by: Lead Data Engineer
+    sql: |
+      SELECT 
+        DATE_TRUNC('MONTH', o.o_orderdate) AS order_month,
+        SUM(l.l_extendedprice * (1 - l.l_discount)) AS net_revenue
+      FROM SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.ORDERS o
+      JOIN SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.LINEITEM l ON o.o_orderkey = l.l_orderkey
+      WHERE o.o_orderdate >= '1996-01-01' AND o.o_orderdate < '1997-01-01'
+      GROUP BY 1
+      ORDER BY 1;
+  - name: order_count_by_status_and_priority
+    question: How many orders are there by status and priority?
+    verified_at: 1700000000
+    verified_by: Analytics Manager
+    sql: |
+      SELECT 
+        o.o_orderstatus AS order_status,
+        o.o_orderpriority AS order_priority,
+        COUNT(DISTINCT o.o_orderkey) AS order_count
+      FROM SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.ORDERS o
+      GROUP BY 1, 2
+      ORDER BY 1, 2;
+  - name: top_10_customers_by_revenue
+    question: Who are the top 10 customers by net revenue?
+    verified_at: 1700000000
+    verified_by: Lead Data Engineer
+    sql: |
+      SELECT 
+        c.c_name AS customer_name,
+        c.c_mktsegment AS market_segment,
+        SUM(l.l_extendedprice * (1 - l.l_discount)) AS net_revenue,
+        COUNT(DISTINCT o.o_orderkey) AS total_orders
+      FROM SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.CUSTOMER c
+      JOIN SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.ORDERS o ON c.c_custkey = o.o_custkey
+      JOIN SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.LINEITEM l ON o.o_orderkey = l.l_orderkey
+      GROUP BY 1, 2
+      ORDER BY 3 DESC
+      LIMIT 10;
+  - name: yearly_revenue_and_order_summary
+    question: What is the total revenue and order count by year?
+    verified_at: 1700000000
+    verified_by: Analytics Manager
+    sql: |
+      SELECT 
+        YEAR(o.o_orderdate) AS order_year,
+        SUM(l.l_extendedprice * (1 - l.l_discount)) AS net_revenue,
+        COUNT(DISTINCT o.o_orderkey) AS total_orders,
+        COUNT(l.l_linenumber) AS line_item_count
+      FROM SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.ORDERS o
+      JOIN SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.LINEITEM l ON o.o_orderkey = l.l_orderkey
+      GROUP BY 1
+      ORDER BY 1;
+  - name: average_order_value_by_country
+    question: What is the average order value by country?
+    verified_at: 1700000000
+    verified_by: Lead Data Engineer
+    sql: |
+      SELECT 
+        n.n_name AS country_name,
+        COUNT(DISTINCT o.o_orderkey) AS total_orders,
+        SUM(l.l_extendedprice * (1 - l.l_discount)) AS net_revenue,
+        SUM(l.l_extendedprice * (1 - l.l_discount)) / COUNT(DISTINCT o.o_orderkey) AS avg_order_value
+      FROM SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.NATION n
+      JOIN SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.CUSTOMER c ON n.n_nationkey = c.c_nationkey
+      JOIN SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.ORDERS o ON c.c_custkey = o.o_custkey
+      JOIN SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.LINEITEM l ON o.o_orderkey = l.l_orderkey
+      GROUP BY 1
+      ORDER BY 4 DESC;
+  - name: revenue_by_shipping_mode
+    question: What is the revenue and discount breakdown by shipping mode?
+    verified_at: 1700000000
+    verified_by: Analytics Manager
+    sql: |
+      SELECT 
+        l.l_shipmode AS ship_mode,
+        SUM(l.l_extendedprice * (1 - l.l_discount)) AS net_revenue,
+        COUNT(l.l_linenumber) AS line_item_count,
+        SUM(l.l_extendedprice * l.l_discount) AS total_discount_amount
+      FROM SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.LINEITEM l
+      GROUP BY 1
+      ORDER BY 2 DESC;
